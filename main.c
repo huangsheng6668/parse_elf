@@ -143,14 +143,15 @@ bool findDynSymbol(FILE *fd, const char *symbol, SectionHeader *retSectionHeader
     return false;
 }
 
+
 int main() {
-    const char *soPath = "/mnt/f/CppProject/parse_elf/libcpixel11.so";
+    const char *soPath = "/mnt/f/CppProject/parse_elf/libaosp11android_runtime64.so";
     FILE *fd = fopen(soPath, "rb");
     if (fd == NULL) {
         printf("fopen error: %s", strerror(errno));
         return -1;
     }
-    const char *symbol = "openat";
+    const char *symbol = "JNI_OnLoad";
     SymHeader *symHeader = (SymHeader *) malloc(sizeof(SymHeader));
 
     bool resultBool = findSymbol(fd, symbol, symHeader);
