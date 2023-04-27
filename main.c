@@ -145,17 +145,17 @@ bool findDynSymbol(FILE *fd, const char *symbol, SectionHeader *retSectionHeader
     return false;
 }
 
-
-int main() {
-    const char *soPath = "/mnt/f/CppProject/parse_elf/libaosp11android_runtime64.so";
-    FILE *fd = fopen(soPath, "rb");
+Elf64_Addr getElfSymbolAddress(const char *elfFilePath, const char *symbol) {
+    FILE *fd = fopen(elfFilePath, "rb");
     if (fd == NULL) {
         printf("fopen error: %s", strerror(errno));
         return -1;
     }
-    const char *symbol = "JNI_OnLoad";
+
     SymHeader *symHeader = (SymHeader *) malloc(sizeof(SymHeader));
 
+    // TODO: 后续这个部分只返回符号的offset即可目前只是想拿到SymHeader的结构体所以才设计了ElfHeader为全局变量，还传入了SymHeader的指针，
+    //  但是目前来看这是没有必要的，findSymbol只返回函数符号在so当中的偏移就好了，节约空间增加效率
     bool resultBool = findSymbol(fd, symbol, symHeader);
     fclose(fd);
     if (resultBool) {
@@ -168,4 +168,8 @@ int main() {
     free(header);
     printf("parse elf finish, the symbol not be found");
     return 0;
+}
+
+int main() {
+    return (int)getElfSymbolAddress("/mnt/f/github_project/parse_elf/libaosp11android_runtime64.so", "_ZN7android14AndroidRuntime9getJavaVMEv");
 }
