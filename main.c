@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+//TODO: 后期会对这个全局变量进一步的处理，起码是让其变成局部，而findSymbol应该只返回对应的符号偏移为宜，只不过后续有可能会想着SymHeader
+// 能有什么可利用的点所以才出此下策
 ElfHeader *header = NULL;
 
 bool findSymbol(FILE *, const char *, SymHeader *);
