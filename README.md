@@ -7,7 +7,17 @@
 
 每个elf文件都存在着一个以`ELF`开头的那么一个结构体Elfxx_Ehdr,这个结构体用于描述elf文件的Section和Program需要映射在内存的布局位置以此让程序正常运行。
 
-常规的寻找符号实际上很简单，就是通过`e_shoff`来找到Section的偏移，通过这个偏移我们可以找到一组Section Header,通过这个Section Header可以找到我们需要的符号位置，需要注意的是Section是编译器生成的调试等相关的信息，也就是说在真正运行当中它实际上是不重要的，可有可无的。但是常规的elf文件注入libc.so这类没有 strip去符号的，和大多即使strip之后还是保留了清晰的Section信息的本项目*目前*就是适配这类elf文件。
+![image-20230428111846191](http://img.juziss.cn/assets/image-20230428111846191.png)
+
+常规的寻找符号实际上很简单，就是通过`e_shoff`来找到Section的偏移，通过这个偏移我们可以找到一组Section Header,通过这个Section Header可以找到我们需要的符号位置
+
+![image-20230428111944022](http://img.juziss.cn/assets/image-20230428111944022.png)
+
+
+
+需要注意的是Section是编译器生成的调试等相关的信息，也就是说在真正运行当中它实际上是不重要的，可有可无的。但是常规的elf文件注入libc.so这类没有 strip去符号的，和大多即使strip之后还是保留了清晰的Section信息的本项目*目前*就是适配这类elf文件。
+
+
 
 如果从内存当中Dump下来elf还需要对Section进行修复，只有正确修复之后的elf才能被反编译器正确的打开和解析。
 
