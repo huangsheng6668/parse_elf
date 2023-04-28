@@ -2,31 +2,29 @@
 #include "elf_self.h"
 #include <string.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-//TODO: 后期会对这个全局变量进一步的处理，起码是让其变成局部，而findSymbol应该只返回对应的符号偏移为宜，只不过后续有可能会想着SymHeader
-// 能有什么可利用的点所以才出此下策
-ElfHeader *header = NULL;
 
-bool findSymbol(FILE *, const char *, SymHeader *);
+Elf64_Addr findSymbolOffset(FILE *, const char *);
 
-bool findDynSymbol(FILE *, const char *, SectionHeader *, SymHeader *, const char *, void *);
+Elf64_Addr findDynSymbolOffset(FILE *, const char *, SectionHeader *, const char *, void *);
 
 /**
  * 寻找符号，寻找的链路为：当.symtab节不存在时，查找.dynsym节以此找到对应的动态符号基址，否则从.symtab当中寻找需要的符号
  * @param fd 打开的elf文件的句柄
  * @param symbol 需要找到的符号名
  * @param retSymHeader 需要返回的符号头
- * @return
+ * @return 返回值为0则意味着找不到或者其符号实际上不在该elf当中
  */
-bool findSymbol(FILE *fd, const char *symbol, SymHeader *retSymHeader) {
-    if (fd == NULL) return false;
+Elf64_Addr findSymbolOffset(FILE *fd, const char *symbol) {
+    if (fd == NULL) return 0;
+
+    // 防止游标传入时不在文件起始位置
     fseek(fd, 0, SEEK_SET);
-    header = (ElfHeader *) malloc(sizeof(ElfHeader));
+    ElfHeader *header = NULL;
 
     struct stat buf;
     int ret = fstat(fileno(fd), &buf);
@@ -37,12 +35,11 @@ bool findSymbol(FILE *fd, const char *symbol, SymHeader *retSymHeader) {
         size_t mmapSize = (buf.st_size + pageSize - 1) / pageSize * pageSize;
         mmapPtr = mmap(NULL, mmapSize, PROT_READ, MAP_SHARED, fileno(fd), 0);
         if (mmapPtr == NULL) {
-            free(header);
             printf("get the mmap ptr error: %s", strerror(errno));
-            return false;
+            return 0;
         }
 
-        memcpy(header, mmapPtr, sizeof(ElfHeader));
+        header = (ElfHeader *) mmapPtr;
 
         // 获取.shstrtab节
         SectionHeader *shstrSectionHeader = (SectionHeader *) (mmapPtr + ELF_FIELD(*header, shoff) +
@@ -74,12 +71,9 @@ bool findSymbol(FILE *fd, const char *symbol, SymHeader *retSymHeader) {
             }
             // 当.symtab节不存在时，查找.dynsym节以此找到对应的动态符号基址
             if (i == ELF_FIELD(*header, shnum) - 1 && !getSymSection) {
-                bool hasSym = findDynSymbol(fd, symbol, &dynsymSection, retSymHeader, dynstr, mmapPtr);
-
-                if (munmap(mmapPtr, mmapSize) == 0) printf("free mmap space success!\n");
-                if (hasSym) return true;
-
-                return false;
+                Elf64_Addr symOff = findDynSymbolOffset(fd, symbol, &dynsymSection, dynstr, mmapPtr);
+                munmap(mmapPtr, mmapSize);
+                return symOff;
             }
         }
 
@@ -96,14 +90,17 @@ bool findSymbol(FILE *fd, const char *symbol, SymHeader *retSymHeader) {
             // 如果类型为STT_FUNC,那么此符号为一个函数
             if (ELF_ST_TYPE(info) == STT_FUNC && strcmp(symbol, symbolName) == 0) {
                 printf("sym name: %s, offset: 0x%lx\n", symbolName, SYM_FIELD(*header, *symHeader, value));
-                memcpy(retSymHeader, symHeader, sizeof(SymHeader));
-                if (munmap(mmapPtr, mmapSize) == 0) printf("free mmap space success!\n");
-                return true;
+                Elf64_Addr addr =
+                        SYM_FIELD(*header, *symHeader, value) >= 0 ? SYM_FIELD(*header, *symHeader, value) : -1;
+
+                munmap(mmapPtr, mmapSize);
+                return addr;
             }
         }
         munmap(mmapPtr, mmapSize);
     }
-    return false;
+    printf("parse elf success but can't find the symbol\n");
+    return 0;
 }
 
 /**
@@ -116,16 +113,12 @@ bool findSymbol(FILE *fd, const char *symbol, SymHeader *retSymHeader) {
  * @param mmapPtr 对应so的mmap指针
  * @return
  */
-bool findDynSymbol(FILE *fd, const char *symbol, SectionHeader *retSectionHeader, SymHeader *retSymHeader,
-                   const char *dynstr, void *mmapPtr) {
-    if (fd == NULL) return false;
+Elf64_Addr findDynSymbolOffset(FILE *fd, const char *symbol, SectionHeader *retSectionHeader,
+                               const char *dynstr, void *mmapPtr) {
+    if (fd == NULL) return 0;
     fseek(fd, 0, SEEK_SET);
 
-
-    if (header == NULL) {
-        header = (ElfHeader *) malloc(sizeof(ElfHeader));
-        memcpy(header, mmapPtr, sizeof(ElfHeader));
-    }
+    ElfHeader *header = (ElfHeader *) mmapPtr;
 
     int arrayLen =
             SECTION_FIELD(*header, *retSectionHeader, size) / SECTION_FIELD(*header, *retSectionHeader, entsize);
@@ -138,11 +131,11 @@ bool findDynSymbol(FILE *fd, const char *symbol, SectionHeader *retSectionHeader
         if (ELF_ST_TYPE(info) == STT_FUNC && strcmp(symbol, dynstr + SYM_FIELD(*header, *symHeader, name)) == 0) {
             printf("dynsym name: %s, offset: 0x%lx\n", dynstr + SYM_FIELD(*header, *symHeader, name),
                    SYM_FIELD(*header, *symHeader, value));
-            memcpy(retSymHeader, symHeader, sizeof(SymHeader));
-            return true;
+            Elf64_Addr addr = SYM_FIELD(*header, *symHeader, value) >= 0 ? SYM_FIELD(*header, *symHeader, value) : -1;
+            return addr;
         }
     }
-    return false;
+    return 0;
 }
 
 Elf64_Addr getElfSymbolAddress(const char *elfFilePath, const char *symbol) {
@@ -152,24 +145,18 @@ Elf64_Addr getElfSymbolAddress(const char *elfFilePath, const char *symbol) {
         return -1;
     }
 
-    SymHeader *symHeader = (SymHeader *) malloc(sizeof(SymHeader));
-
-    // TODO: 后续这个部分只返回符号的offset即可目前只是想拿到SymHeader的结构体所以才设计了ElfHeader为全局变量，还传入了SymHeader的指针，
-    //  但是目前来看这是没有必要的，findSymbol只返回函数符号在so当中的偏移就好了，节约空间增加效率
-    bool resultBool = findSymbol(fd, symbol, symHeader);
-    fclose(fd);
-    if (resultBool) {
-        Elf64_Addr addr = SYM_FIELD(*header, *symHeader, value);
-        free(symHeader);
-        free(header);
-        return addr;
+    Elf64_Addr result = findSymbolOffset(fd, symbol);
+    if (result == 0) {
+        printf("can't find symbol at this elf");
+        return 0;
     }
-    free(symHeader);
-    free(header);
-    printf("parse elf finish, the symbol not be found");
-    return 0;
+    printf("get Symbol offset: 0x%lx", result);
+    fclose(fd);
+    return result;
 }
 
 int main() {
-    return (int)getElfSymbolAddress("/mnt/f/github_project/parse_elf/libaosp11android_runtime64.so", "_ZN7android14AndroidRuntime9getJavaVMEv");
+    return (int) getElfSymbolAddress(
+            "/mnt/c/Users/juziss/Desktop/github_project/parse_elf/libdusanwa.so",
+            "JNI_OnLoad!");
 }
