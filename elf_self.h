@@ -27,7 +27,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <elf.h>
+#include "mac_elf_struct.h"
+//#include <elf.h>
 
 typedef struct {
     unsigned char e_ident[EI_NIDENT];
@@ -100,6 +101,23 @@ typedef union {
     Elf32_Shdr class32;
     Elf64_Shdr class64;
 } SectionHeader;
+
+typedef struct elf32_sym {
+    Elf32_Word st_name;
+    Elf32_Addr st_value;
+    Elf32_Word st_size;
+    unsigned char st_info;
+    unsigned char st_other;
+    Elf32_Half st_shndx;
+} Elf32_Sym;
+typedef struct elf64_sym {
+    Elf64_Word st_name;
+    unsigned char st_info;
+    unsigned char st_other;
+    Elf64_Half st_shndx;
+    Elf64_Addr st_value;
+    Elf64_Xword st_size;
+} Elf64_Sym;
 
 typedef union {
     Elf32_Sym class32;

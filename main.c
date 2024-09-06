@@ -157,6 +157,6 @@ Elf64_Addr getElfSymbolAddress(const char *elfFilePath, const char *symbol) {
 
 int main() {
     return (int) getElfSymbolAddress(
-            "/mnt/c/Users/juziss/Desktop/github_project/parse_elf/libdusanwa.so",
+            "/Users/juziss/github_project/parse_elf/libdusanwa.so",
             "JNI_OnLoad");
 }
